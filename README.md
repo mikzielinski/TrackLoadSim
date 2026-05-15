@@ -43,6 +43,10 @@ Szczegóły: **[docs/INSTALACJA.md](docs/INSTALACJA.md)**
 | [frontend/README.md](frontend/README.md) | Frontend React |
 
 Interaktywne API: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
+<img width="1795" height="1238" alt="image" src="https://github.com/user-attachments/assets/709291d4-3e5b-4c68-9dd1-68dad585857e" />
+<img width="1737" height="1194" alt="image" src="https://github.com/user-attachments/assets/32d4620f-7b96-4449-a53e-e47080201ab0" />
+<img width="467" height="1170" alt="image" src="https://github.com/user-attachments/assets/99186910-a5b8-4412-9ea4-fb61c33d0833" />
+
 
 ## Stos technologiczny
 
