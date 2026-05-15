@@ -1,0 +1,3 @@
+# Optional: pre-built wheel may be available for your Python version.
+# If install fails, use Docker/Linux or install Visual C++ Build Tools.
+pybullet==3.2.6
