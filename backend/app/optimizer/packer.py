@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from app.models.schemas import LoadingPlan, PlacedBox, Product, Trailer
 
 Box6 = tuple[float, float, float, float, float, float]
+PackMode = Literal["greedy", "stacked"]
 
 
 def _overlap(a: Box6, b: Box6) -> bool:
@@ -13,7 +16,7 @@ def _overlap(a: Box6, b: Box6) -> bool:
     return not (ax + al <= bx or bx + bl <= ax or ay + aw <= by or by + bw <= ay or az + ah <= bz or bz + bh <= az)
 
 
-def _footprint_supports(box: Box6, placed: list[Box6]) -> bool:
+def _footprint_supports(box: Box6, placed: list[Box6], min_ratio: float) -> bool:
     x, y, z, l, w, h = box
     if z <= 1.0:
         return True
@@ -29,10 +32,10 @@ def _footprint_supports(box: Box6, placed: list[Box6]) -> bool:
         ix1, iy1 = min(bx2, ox + ol), min(by2, oy + ow)
         if ix1 > ix0 and iy1 > iy0:
             supported += (ix1 - ix0) * (iy1 - iy0)
-    return supported >= 0.35 * foot_area
+    return supported >= min_ratio * foot_area
 
 
-def _orientations(p: Product) -> list[tuple[float, float, float]]:
+def _orientations(p: Product, upright_first: bool) -> list[tuple[float, float, float]]:
     nominal = (p.length_mm, p.width_mm, p.height_mm)
     if not p.can_rotate:
         return [nominal]
@@ -52,26 +55,58 @@ def _orientations(p: Product) -> list[tuple[float, float, float]]:
     for o in sorted(perms):
         if o not in ordered:
             ordered.append(o)
+    if upright_first:
+        return ordered
     return ordered
 
 
-def _orientation_rank(l: float, w: float, h: float, l_tr: float, w_tr: float) -> tuple[float, float, float]:
-    """Lower is better: fit trailer, long side along X, then along Y."""
+def _orientation_rank(l: float, w: float, h: float, l_tr: float, w_tr: float, upright: bool) -> tuple[float, float, float]:
     if l > l_tr or w > w_tr:
         return (1e9, 1e9, 1e9)
+    if upright:
+        # Prefer original height as vertical (z) dimension
+        height_penalty = 0.0 if h == max(l, w, h) else 1.0
+        return (height_penalty, -min(l, w), l + w)
     long_side = max(l, w)
     short_side = min(l, w)
     return (0.0, -long_side, short_side + h * 0.001)
 
 
-def _placement_score(cand: Box6) -> float:
-    """Lower is better: floor first, then front (x), then side (y)."""
+def _placement_score_greedy(cand: Box6) -> float:
     x, y, z, _l, _w, _h = cand
     return z * 1_000_000.0 + x * 10.0 + y
 
 
+def _placement_score_stacked(cand: Box6, prod: Product, placed: list[Box6]) -> float:
+    x, y, z, l, w, h = cand
+    base = z * 800_000.0 + x * 12.0 + y
+    if z <= 1.0:
+        return base
+    # Prefer stacking on existing cargo (columns) over spreading on floor
+    stack_bonus = 0.0
+    foot_area = max(l * w, 1e-6)
+    for ox, oy, oz, ol, ow, oh in placed:
+        if abs((oz + oh) - z) > 5.0:
+            continue
+        ix0, iy0 = max(x, ox), max(y, oy)
+        ix1, iy1 = min(x + l, ox + ol), min(y + w, oy + ow)
+        if ix1 > ix0 and iy1 > iy0:
+            overlap = (ix1 - ix0) * (iy1 - iy0)
+            stack_bonus = max(stack_bonus, overlap / foot_area)
+    bonus = 120_000.0 * stack_bonus
+    if prod.stacking_group:
+        for ox, oy, oz, ol, ow, oh in placed:
+            if abs((oz + oh) - z) > 5.0:
+                continue
+            ix0, iy0 = max(x, ox), max(y, oy)
+            ix1, iy1 = min(x + l, ox + ol), min(y + w, oy + ow)
+            if ix1 > ix0 and iy1 > iy0:
+                bonus += 25_000.0
+                break
+    return base - bonus
+
+
 def _axis_candidates(placed: list[Box6], trailer_limit: float, item_dim: float, axis: int) -> list[float]:
-    """Start positions aligned to walls and placed box edges on one axis."""
     coords: set[float] = {0.0}
     for box in placed:
         if axis == 0:
@@ -86,19 +121,39 @@ def _axis_candidates(placed: list[Box6], trailer_limit: float, item_dim: float, 
     return sorted(c for c in coords if c + item_dim <= trailer_limit + 0.5)
 
 
-def pack_trailer(trailer: Trailer, products: list[Product], grid_mm: float = 50.0) -> LoadingPlan:
-    del grid_mm  # kept for API compatibility; candidates are edge-based
-
+def _expand_products(products: list[Product]) -> list[Product]:
     items: list[Product] = []
     max_per_sku = 80
     for p in products:
         q = max(0, min(p.quantity, max_per_sku))
         items.extend([p] * q)
+    return items
 
-    def item_volume(prod: Product) -> float:
-        return prod.length_mm * prod.width_mm * prod.height_mm
 
-    items.sort(key=item_volume, reverse=True)
+def pack_trailer(
+    trailer: Trailer,
+    products: list[Product],
+    mode: PackMode = "greedy",
+    *,
+    item_sequence: list[Product] | None = None,
+    fragile_floor_only: bool = False,
+) -> LoadingPlan:
+    stacked = mode == "stacked"
+    support_ratio = 0.42 if stacked else 0.35
+    upright_first = stacked
+
+    if item_sequence is not None:
+        items = list(item_sequence)
+    else:
+        items = _expand_products(products)
+
+        def sort_key(prod: Product) -> tuple[float, float]:
+            vol = prod.length_mm * prod.width_mm * prod.height_mm
+            if stacked:
+                return (-prod.weight_kg, -vol)
+            return (-vol, -prod.weight_kg)
+
+        items.sort(key=sort_key)
 
     placed: list[Box6] = []
     boxes: list[PlacedBox] = []
@@ -111,12 +166,14 @@ def pack_trailer(trailer: Trailer, products: list[Product], grid_mm: float = 50.
     def try_place(prod: Product) -> PlacedBox | None:
         nonlocal order
         orientations = sorted(
-            _orientations(prod),
-            key=lambda t: _orientation_rank(t[0], t[1], t[2], l_tr, w_tr),
+            _orientations(prod, upright_first=upright_first),
+            key=lambda t: _orientation_rank(t[0], t[1], t[2], l_tr, w_tr, upright=upright_first),
         )
         best_cand: Box6 | None = None
         best_score = float("inf")
         for length, width, height in orientations:
+            if prod.fragile and height > prod.height_mm * 1.05 and stacked:
+                continue
             if length > l_tr or width > w_tr or height > h_tr:
                 continue
             xs = _axis_candidates(placed, l_tr, length, 0)
@@ -130,9 +187,15 @@ def pack_trailer(trailer: Trailer, products: list[Product], grid_mm: float = 50.
                             continue
                         if any(_overlap(cand, o) for o in placed):
                             continue
-                        if not _footprint_supports(cand, placed):
+                        if not _footprint_supports(cand, placed, support_ratio):
                             continue
-                        score = _placement_score(cand)
+                        if prod.fragile and z > 1.0 and (stacked or fragile_floor_only):
+                            continue
+                        score = (
+                            _placement_score_stacked(cand, prod, placed)
+                            if stacked
+                            else _placement_score_greedy(cand)
+                        )
                         if score < best_score:
                             best_score = score
                             best_cand = cand
@@ -170,8 +233,13 @@ def pack_trailer(trailer: Trailer, products: list[Product], grid_mm: float = 50.
 
     if skipped:
         warnings.append(
-            f"Nie udało się ułożyć {skipped} szt. — brak miejsca, wysokości lub reguły podparcia (≥35% powierzchni)."
+            f"Nie udało się ułożyć {skipped} szt. — brak miejsca, wysokości lub reguły podparcia."
         )
+
+    if stacked and not skipped:
+        warnings.append("Tryb „stosy”: układ pionowy, ciężkie na dole — zweryfikuj analizę bezpieczeństwa.")
+    if fragile_floor_only and any(b.fragile for b in boxes):
+        warnings.append("AI: kruche towary tylko na podłodze naczepy.")
 
     tw = sum(b.weight_kg for b in boxes)
     if tw > trailer.max_weight_kg:

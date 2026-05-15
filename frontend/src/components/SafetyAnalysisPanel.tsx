@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { LoadSafetyAnalysis, Trailer } from "../types/api";
 
 function StatusPill({ ok, label }: { ok: boolean; label: string }) {
@@ -22,9 +23,13 @@ function riskColor(level: string) {
 export function SafetyAnalysisPanel({
   trailer,
   analysis,
+  selectedInstanceId,
+  onFocusBox,
 }: {
   trailer: Trailer;
   analysis: LoadSafetyAnalysis | null;
+  selectedInstanceId: string | null;
+  onFocusBox: (instanceId: string) => void;
 }) {
   if (!analysis) {
     return (
@@ -40,6 +45,20 @@ export function SafetyAnalysisPanel({
   const deck = trailer.deck_height_mm ?? 1180;
   const latG = trailer.max_lateral_accel_g ?? 0.5;
   const brakeG = trailer.max_brake_accel_g ?? 0.8;
+
+  const riskBtn = (id: string, active: boolean, children: ReactNode) => (
+    <button
+      type="button"
+      onClick={() => onFocusBox(id)}
+      className={`w-full rounded border p-2 text-left text-[10px] transition ${
+        active
+          ? "border-accent bg-accent/15 ring-1 ring-accent/50"
+          : "border-line/80 bg-panel2 hover:border-accent/40 hover:bg-panel"
+      }`}
+    >
+      {children}
+    </button>
+  );
 
   return (
     <div className="space-y-3 rounded border border-line bg-panel p-3 text-xs">
@@ -113,28 +132,46 @@ export function SafetyAnalysisPanel({
 
         {analysis.ceiling_packed_ids.length > 0 && (
           <div className="rounded border border-amber-900/40 bg-amber-950/25 p-2 text-[10px] text-amber-200">
-            <strong>Upchnięcie pod sufit:</strong> {analysis.ceiling_packed_ids.length} jednostek (
-            {analysis.ceiling_packed_ids.slice(0, 4).join(", ")}
-            {analysis.ceiling_packed_ids.length > 4 ? "…" : ""}) — plastik może się ściskać, rośnie ryzyko przesunięcia.
+            <strong>Upchnięcie pod sufit</strong> ({analysis.ceiling_packed_ids.length}) — kliknij karton:
+            <div className="mt-2 flex flex-wrap gap-1">
+              {analysis.ceiling_packed_ids.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onFocusBox(id)}
+                  className={`rounded border px-1.5 py-0.5 font-mono transition ${
+                    selectedInstanceId === id
+                      ? "border-accent bg-accent/20 text-amber-100"
+                      : "border-amber-800/60 hover:border-accent/50"
+                  }`}
+                >
+                  {id}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {analysis.packaging_risks.length > 0 && (
           <details className="border-t border-line pt-2" open>
             <summary className="cursor-pointer text-[10px] uppercase text-slate-500">
-              Ryzyko przesunięcia ({analysis.packaging_risks.length})
+              Ryzyko przesunięcia ({analysis.packaging_risks.length}) — kliknij, by pokazać w 3D
             </summary>
-            <ul className="mt-2 max-h-40 space-y-2 overflow-auto">
-              {analysis.packaging_risks.map((r) => (
-                <li key={r.instance_id} className="rounded border border-line/80 bg-panel2 p-2 text-[10px]">
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-slate-300">{r.name}</span>
-                    <span className={riskColor(r.risk_level)}>{r.risk_level}</span>
-                  </div>
-                  <div className="mt-0.5 text-slate-500">{r.instance_id}</div>
-                  <p className="mt-1 leading-snug text-slate-400">{r.reason}</p>
-                </li>
-              ))}
+            <ul className="mt-2 max-h-48 space-y-2 overflow-auto">
+              {analysis.packaging_risks.map((r) =>
+                riskBtn(
+                  r.instance_id,
+                  selectedInstanceId === r.instance_id,
+                  <>
+                    <div className="flex justify-between gap-2">
+                      <span className="font-medium text-slate-300">{r.name}</span>
+                      <span className={riskColor(r.risk_level)}>{r.risk_level}</span>
+                    </div>
+                    <div className="mt-0.5 text-slate-500">{r.instance_id}</div>
+                    <p className="mt-1 leading-snug text-slate-400">{r.reason}</p>
+                  </>,
+                ),
+              )}
             </ul>
           </details>
         )}

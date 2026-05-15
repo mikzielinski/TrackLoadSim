@@ -99,6 +99,17 @@ class OptimizeRequest(BaseModel):
     products: list[Product]
     scenario_id: str | None = None
     run_physics: bool = True
+    mode: Literal["greedy", "stacked"] = Field(
+        default="greedy",
+        description="greedy = szybkie wypełnianie od podłogi; stacked = stosy pionowe, cięższe na dole",
+    )
+
+
+class ExportLoadMapPdfRequest(BaseModel):
+    trailer: Trailer
+    plan: LoadingPlan
+    title: str = "Mapa załadunku"
+    scenario_id: str | None = None
 
 
 class PhysicsValidationResult(BaseModel):
@@ -138,6 +149,26 @@ class RolloverEstimate(BaseModel):
     summary: str
 
 
+class RecommendationSection(BaseModel):
+    status: Literal["ok", "caution", "critical"]
+    headline: str
+    items: list[str] = Field(default_factory=list)
+
+
+class SummaryReport(BaseModel):
+    status: Literal["ok", "caution", "critical"]
+    headline: str
+    paragraph: str
+    verdict: str
+    key_metrics: list[str] = Field(default_factory=list)
+
+
+class RecommendationsReport(BaseModel):
+    loading: RecommendationSection
+    driving: RecommendationSection
+    summary: SummaryReport
+
+
 class LoadSafetyAnalysis(BaseModel):
     rollover: RolloverEstimate
     speed_scenarios: list[SpeedScenarioRisk]
@@ -145,6 +176,7 @@ class LoadSafetyAnalysis(BaseModel):
     ceiling_packed_ids: list[str] = Field(default_factory=list)
     global_ok: bool
     notes: list[str] = Field(default_factory=list)
+    recommendations: RecommendationsReport | None = None
 
 
 class AnalyzeRequest(BaseModel):
@@ -152,3 +184,41 @@ class AnalyzeRequest(BaseModel):
     products: list[Product]
     plan: LoadingPlan
     speeds_kmh: list[int] = Field(default_factory=lambda: [50, 80, 90])
+
+
+class AiStatusRequest(BaseModel):
+    api_key: str | None = Field(default=None, description="Opcjonalny klucz (nadpisuje OPENAI_API_KEY)")
+
+
+class AiConnectionStatus(BaseModel):
+    configured: bool
+    connected: bool
+    model: str | None = None
+    message: str
+
+
+class AiPackingGuidance(BaseModel):
+    pack_mode: Literal["greedy", "stacked"]
+    item_sequence_product_ids: list[str]
+    fragile_floor_only: bool = False
+    strategy_summary: str
+    loading_tips: list[str] = Field(default_factory=list)
+    model: str = "gpt-4o-mini"
+
+
+class AiOptimizeRequest(BaseModel):
+    trailer: Trailer
+    products: list[Product]
+    scenario_id: str | None = None
+    run_physics: bool = True
+    user_notes: str = Field(default="", description="Uwagi operatora dla AI")
+    api_key: str | None = Field(default=None, description="Opcjonalny klucz OpenAI")
+    baseline_plan: LoadingPlan | None = None
+
+
+class AiOptimizeResponse(BaseModel):
+    plan: LoadingPlan
+    physics: PhysicsValidationResult
+    guidance: AiPackingGuidance
+    connection: AiConnectionStatus
+    safety_analysis: LoadSafetyAnalysis | None = None

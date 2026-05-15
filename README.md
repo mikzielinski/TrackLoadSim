@@ -1,70 +1,83 @@
 # TrackLoadSim
 
-Symulator i optymalizator ładowania luźnego towaru w naczepie — planowanie układu, wizualizacja 3D oraz walidacja fizyczna (PyBullet).
+Symulator i optymalizator ładowania luźnego towaru w naczepie — planowanie układu, wizualizacja 3D, analiza bezpieczeństwa, rekomendacje oraz optymalizacja wspomagana GPT.
+
+## Funkcje
+
+- **Pakowanie 3D** — tryby `greedy` (podłoga) i `stacked` (stosy / warstwy)
+- **Widok 3D** — React Three Fiber, środek masy, wybór skrzynki
+- **Analiza dynamiczna** — hamowanie, zakręty, ryzyko przewrótu
+- **Rekomendacje** — podsumowanie operacyjne, załadunek, jazda
+- **Optymalizacja AI** — OpenAI GPT (kolejność SKU, strategia, dopasowanie trybu)
+- **Import** Excel / CSV · **Eksport** JSON + mapa załadunku PDF
+- **PyBullet** (opcjonalnie) — test stabilności po optymalizacji
+
+## Szybki start
+
+```bash
+# Backend (port 8001)
+cd backend && python -m venv .venv && .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8001
+
+# Frontend (port 5173) — osobny terminal
+cd frontend && npm install && npm run dev
+```
+
+→ [http://localhost:5173](http://localhost:5173)
+
+Szczegóły: **[docs/INSTALACJA.md](docs/INSTALACJA.md)**
+
+## Dokumentacja
+
+| Dokument | Opis |
+|----------|------|
+| **[docs/INSTRUKCJA.md](docs/INSTRUKCJA.md)** | **Pełna instrukcja użytkownika** (workflow, panele, AI, FAQ) |
+| [docs/INSTALACJA.md](docs/INSTALACJA.md) | Instalacja Windows / Linux / macOS |
+| [docs/API.md](docs/API.md) | REST API |
+| [docs/AI.md](docs/AI.md) | Integracja OpenAI |
+| [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) | Specyfikacja MVP |
+| [backend/README.md](backend/README.md) | Backend FastAPI |
+| [frontend/README.md](frontend/README.md) | Frontend React |
+
+Interaktywne API: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
 
 ## Stos technologiczny
 
 | Warstwa | Technologie |
 |---------|-------------|
 | Frontend | React, TypeScript, Vite, Tailwind CSS, React Three Fiber |
-| Backend | Python, FastAPI, Pydantic |
+| Backend | Python, FastAPI, Pydantic, ReportLab |
+| AI | OpenAI API (`openai`) |
 | Fizyka (opcjonalnie) | PyBullet |
-| Import danych | Excel (.xlsx) / CSV |
+| Import | Excel (.xlsx) / CSV |
 
-## Szybki start
+## OpenAI (opcjonalnie)
 
-### Wymagania
-
-- Python 3.11+
-- Node.js 18+
-
-### Backend (port 8001)
-
-```bash
-cd backend
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # Linux / macOS
-pip install -r requirements.txt
-pip install -r requirements-physics.txt   # opcjonalnie — walidacja PyBullet
-uvicorn app.main:app --reload --port 8001
+```powershell
+$env:OPENAI_API_KEY = "sk-..."
 ```
 
-### Frontend (port 5173)
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Otwórz [http://localhost:5173](http://localhost:5173). Żądania `/api/*` są proxyowane do backendu (patrz `frontend/vite.config.ts`).
+Klucz można też podać w panelu **Optymalizacja AI** w UI. Model domyślny: `gpt-4o-mini`.
 
 ## Scenariusze demonstracyjne
 
 | ID | Opis |
 |----|------|
-| `S1_HALF_LOADED` | Naczepa w połowie załadowana — dużo wolnej przestrzeni |
-| `S2_OPTIMIZED` | Zoptymalizowany układ, wysokie wykorzystanie |
-| `S3_OVERLOAD` | Agresywne pakowanie, ryzyko przeciążenia |
+| `S1_HALF_LOADED` | ~50% podłogi, dużo wolnej wysokości |
+| `S2_OPTIMIZED` | Układ 2-warstwowy, wysokie wykorzystanie |
+| `S3_OVERLOAD` | Ryzyko przeciążenia masy |
 | `S4_FRAGILE` | Towary delikatne |
 | `S5_MIXED` | Mieszany asortyment |
 | `S6_MAX_PACKED` | Maksymalne zagęszczenie |
-
-## Dokumentacja
-
-- [Specyfikacja projektu i wymagania MVP](docs/PROJECT_SPEC.md)
-- [Opis API REST](docs/API.md)
-- [Backend — uruchomienie i struktura](backend/README.md)
-- [Frontend — uruchomienie i struktura](frontend/README.md)
 
 ## Struktura repozytorium
 
 ```text
 TrackLoadSim/
-├── backend/          # FastAPI, optymalizator, fizyka, import Excel
-├── frontend/         # UI React + widok 3D naczepy
-└── docs/             # Specyfikacja i API
+├── backend/          # FastAPI, pakowacz, AI, fizyka, PDF
+├── frontend/         # UI React + widok 3D
+└── docs/             # Instrukcja, API, instalacja
 ```
 
 ## Licencja

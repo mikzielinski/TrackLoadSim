@@ -89,6 +89,14 @@ export function LoadInsightsPanel({
           <span className="text-slate-200">{(metrics.volumeRatio * 100).toFixed(1)}%</span>
         </div>
 
+        <div className="flex justify-between gap-2">
+          <span className="text-slate-500">Warstwy (pionowo)</span>
+          <span className={metrics.stackLayers <= 1 ? "text-amber-300" : "text-slate-200"}>
+            {metrics.stackLayers}
+            <span className="text-slate-500"> · na podłodze {metrics.onFloorCount}/{metrics.boxCount}</span>
+          </span>
+        </div>
+
         <div className="border-t border-line pt-2">
           <div className="flex justify-between gap-2">
             <span className="text-slate-500">Powierzchnia podłogi (z≈0)</span>

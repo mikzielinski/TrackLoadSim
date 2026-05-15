@@ -38,9 +38,12 @@ Oblicza plan załadunku (greedy packer) i opcjonalnie waliduje fizykę.
   "trailer": { "...": "Trailer" },
   "products": [ { "...": "Product" } ],
   "scenario_id": "optional",
-  "run_physics": true
+  "run_physics": true,
+  "mode": "greedy"
 }
 ```
+
+`mode`: `greedy` (domyślnie, wypełnianie od podłogi) lub `stacked` (stosy pionowe, cięższe na dole).
 
 **Odpowiedź:**
 
@@ -71,6 +74,13 @@ Zwraca obiekt `Scenario` z wyliczonym planem i ewentualnym ostrzeżeniem fizyki.
 
 ## Eksport
 
+### `POST /api/export/load-map-pdf`
+
+Mapa załadunku (widok z góry) w PDF.
+
+**Body:** `{ "trailer", "plan", "title"?, "scenario_id"? }`  
+**Odpowiedź:** `application/pdf` (plik do pobrania).
+
 ### `POST /api/export/plan`
 
 **Body:** `LoadingPlan`
@@ -80,6 +90,62 @@ Zwraca obiekt `Scenario` z wyliczonym planem i ewentualnym ostrzeżeniem fizyki.
 ```json
 { "json": "<sformatowany JSON planu>" }
 ```
+
+## Optymalizacja AI (OpenAI)
+
+Wymaga skonfigurowanego klucza API (`OPENAI_API_KEY` na serwerze lub `api_key` w żądaniu).
+
+### `POST /api/ai/verify`
+
+Sprawdza połączenie z OpenAI.
+
+**Body (opcjonalne):** `{ "api_key": "sk-..." }`
+
+**Odpowiedź:** `AiConnectionStatus` — `configured`, `connected`, `model`, `message`
+
+### `POST /api/ai/optimize`
+
+Plan od GPT (kolejność SKU + tryb) + pakowacz 3D + analiza na **nowym** planie.
+
+**Body:**
+
+```json
+{
+  "trailer": { "...": "Trailer" },
+  "products": [ { "...": "Product" } ],
+  "scenario_id": "S1_HALF_LOADED",
+  "run_physics": true,
+  "user_notes": "Piętruj cięższe na dole",
+  "api_key": null,
+  "baseline_plan": null
+}
+```
+
+- `baseline_plan` — opcjonalny bieżący plan z UI; jeśli pominięty, liczony jest greedy.
+- `user_notes` — uwagi operatora trafiają do promptu GPT.
+
+**Odpowiedź:**
+
+```json
+{
+  "plan": { "...": "LoadingPlan" },
+  "physics": { "...": "PhysicsValidationResult" },
+  "guidance": {
+    "pack_mode": "greedy | stacked",
+    "item_sequence_product_ids": ["..."],
+    "fragile_floor_only": false,
+    "strategy_summary": "...",
+    "loading_tips": ["..."],
+    "model": "gpt-4o-mini"
+  },
+  "connection": { "...": "AiConnectionStatus" },
+  "safety_analysis": { "...": "LoadSafetyAnalysis" }
+}
+```
+
+`safety_analysis.recommendations` — podsumowanie i rekomendacje dla **wynikowego** układu (w tym wskazówki AI w sekcji `loading`).
+
+Szczegóły: [AI.md](./AI.md)
 
 ## Analiza bezpieczeństwa
 
@@ -98,7 +164,11 @@ Analiza dynamiczna (hamowanie, zakręty) dla danego planu.
 }
 ```
 
-**Odpowiedź:** `LoadSafetyAnalysis` (metryki, ostrzeżenia, ocena ryzyka).
+**Odpowiedź:** `LoadSafetyAnalysis` (metryki, ostrzeżenia, ocena ryzyka) oraz `recommendations`:
+
+- `loading` — rekomendacja załadunku (status, punkty)
+- `driving` — rekomendacja jazdy
+- `summary` — podsumowanie operacyjne (akapit, werdykt, metryki kluczowe)
 
 ## Modele (skrót)
 

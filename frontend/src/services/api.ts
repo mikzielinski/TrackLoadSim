@@ -1,4 +1,12 @@
-import type { LoadSafetyAnalysis, LoadingPlan, OptimizeResponse, Scenario } from "../types/api";
+import type {
+  AiConnectionStatus,
+  AiOptimizeResponse,
+  LoadSafetyAnalysis,
+  LoadingPlan,
+  OptimizeResponse,
+  PackMode,
+  Scenario,
+} from "../types/api";
 
 const TRAILER_DEFAULTS = {
   wheelbase_mm: 3800,
@@ -30,7 +38,11 @@ export async function fetchScenario(id: string): Promise<Scenario> {
   return parseJson(res);
 }
 
-export async function optimizeScenario(scenario: Scenario, runPhysics: boolean): Promise<OptimizeResponse> {
+export async function optimizeScenario(
+  scenario: Scenario,
+  runPhysics: boolean,
+  mode: PackMode = "greedy",
+): Promise<OptimizeResponse> {
   const res = await fetch("/api/optimize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -39,6 +51,7 @@ export async function optimizeScenario(scenario: Scenario, runPhysics: boolean):
       products: scenario.products,
       scenario_id: scenario.scenario_id,
       run_physics: runPhysics,
+      mode,
     }),
   });
   return parseJson(res);
@@ -80,4 +93,59 @@ export async function exportPlanJson(plan: LoadingPlan): Promise<string> {
   });
   const data = await parseJson<{ json: string }>(res);
   return data.json;
+}
+
+export async function exportLoadMapPdf(
+  trailer: Scenario["trailer"],
+  plan: LoadingPlan,
+  title: string,
+  scenarioId?: string,
+): Promise<Blob> {
+  const res = await fetch("/api/export/load-map-pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      trailer: withTrailerDefaults(trailer),
+      plan,
+      title,
+      scenario_id: scenarioId ?? null,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+  return res.blob();
+}
+
+export async function verifyAiConnection(apiKey: string | null): Promise<AiConnectionStatus> {
+  const res = await fetch("/api/ai/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+  return parseJson(res);
+}
+
+export async function optimizeWithAi(
+  scenario: Scenario,
+  runPhysics: boolean,
+  userNotes: string,
+  apiKey: string | null,
+  baselinePlan: LoadingPlan | null,
+): Promise<AiOptimizeResponse> {
+  const res = await fetch("/api/ai/optimize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      trailer: withTrailerDefaults(scenario.trailer),
+      products: scenario.products,
+      scenario_id: scenario.scenario_id,
+      run_physics: runPhysics,
+      user_notes: userNotes,
+      api_key: apiKey,
+      baseline_plan: baselinePlan,
+    }),
+  });
+  return parseJson(res);
 }

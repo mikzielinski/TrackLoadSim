@@ -2,16 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LoadSafetyAnalysis, LoadingPlan, PlacedBox, Scenario } from "./types/api";
 import {
   analyzeLoad,
+  exportLoadMapPdf,
   exportPlanJson,
   fetchScenario,
   fetchScenarios,
   importProducts,
   optimizeScenario,
+  optimizeWithAi,
+  verifyAiConnection,
   withTrailerDefaults,
 } from "./services/api";
+import { AiOptimizePanel } from "./components/AiOptimizePanel";
 import { ProductPanel } from "./components/ProductPanel";
 import { TrailerViewport } from "./components/TrailerViewport";
 import { LoadInsightsPanel } from "./components/LoadInsightsPanel";
+import { RecommendationsPanel } from "./components/RecommendationsPanel";
 import { SafetyAnalysisPanel } from "./components/SafetyAnalysisPanel";
 import { computeLoadMetrics } from "./utils/loadMetrics";
 
@@ -27,6 +32,7 @@ export default function App() {
   const [runPhysics, setRunPhysics] = useState(true);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [safetyAnalysis, setSafetyAnalysis] = useState<LoadSafetyAnalysis | null>(null);
+  const [aiStrategy, setAiStrategy] = useState<string | null>(null);
 
   useEffect(() => {
     fetchScenarios()
@@ -54,31 +60,56 @@ export default function App() {
     if (list.length && !scenario) void loadScenario(list[0].scenario_id);
   }, [list, scenario, loadScenario]);
 
+  const applyOptimizeResult = (res: Awaited<ReturnType<typeof optimizeScenario>>, modeLabel: string) => {
+    setPlan(res.plan);
+    setSelectedInstanceId(null);
+    const requested = scenario!.products.reduce((s, p) => s + p.quantity, 0);
+    const placed = res.plan.boxes.length;
+    const ph = res.physics;
+    const placeMsg =
+      placed < requested ? `Ułożono ${placed} / ${requested} szt.` : `Ułożono ${placed} szt. (${modeLabel}).`;
+    const warnMsg = res.plan.warnings.length ? ` Ostrzeżenia: ${res.plan.warnings.join(" ")}` : "";
+    const phLabel = ph.mode === "pybullet" ? "PyBullet" : ph.mode === "skipped" ? "bez symulacji" : ph.mode;
+    setPhysicsText(`${placeMsg}${warnMsg} · [${phLabel}] ${ph.message}${ph.steps_simulated ? ` · kroki: ${ph.steps_simulated}` : ""}`);
+  };
+
   const onOptimize = async () => {
     if (!scenario) return;
     setBusy(true);
     setErr(null);
     try {
-      const res = await optimizeScenario(scenario, runPhysics);
-      setPlan(res.plan);
-      setSelectedInstanceId(null);
-      const requested = scenario.products.reduce((s, p) => s + p.quantity, 0);
-      const placed = res.plan.boxes.length;
-      const ph = res.physics;
-      const placeMsg =
-        placed < requested
-          ? `Ułożono ${placed} / ${requested} szt.`
-          : `Ułożono ${placed} szt. (nowy układ od zera).`;
-      const warnMsg = res.plan.warnings.length ? ` Ostrzeżenia: ${res.plan.warnings.join(" ")}` : "";
-      const phLabel =
-        ph.mode === "pybullet"
-          ? "PyBullet"
-          : ph.mode === "skipped"
-            ? "bez symulacji"
-            : ph.mode;
-      setPhysicsText(
-        `${placeMsg}${warnMsg} · [${phLabel}] ${ph.message}${ph.steps_simulated ? ` · kroki: ${ph.steps_simulated}` : ""}`,
-      );
+      const res = await optimizeScenario(scenario, runPhysics, "greedy");
+      applyOptimizeResult(res, "układ podstawowy");
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onOptimizeAi = async (userNotes: string, apiKey: string | null) => {
+    if (!scenario) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await optimizeWithAi(scenario, runPhysics, userNotes, apiKey, plan);
+      setAiStrategy(res.guidance.strategy_summary);
+      if (res.safety_analysis) setSafetyAnalysis(res.safety_analysis);
+      applyOptimizeResult(res, `AI · ${res.guidance.pack_mode}`);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onOptimizeStacked = async () => {
+    if (!scenario) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await optimizeScenario(scenario, runPhysics, "stacked");
+      applyOptimizeResult(res, "stosy pionowe");
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -164,6 +195,41 @@ export default function App() {
     }
   };
 
+  const onExportPdf = async () => {
+    if (!displayPlan || !scenario) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const blob = await exportLoadMapPdf(
+        withTrailerDefaults(scenario.trailer),
+        displayPlan,
+        `Mapa załadunku — ${scenario.title}`,
+        scenario.scenario_id,
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mapa-zaladunku-${scenario.scenario_id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const riskHighlightIds = useMemo(() => {
+    if (!safetyAnalysis) return new Set<string>();
+    const ids = new Set(safetyAnalysis.packaging_risks.map((r) => r.instance_id));
+    for (const id of safetyAnalysis.ceiling_packed_ids) ids.add(id);
+    return ids;
+  }, [safetyAnalysis]);
+
+  const onFocusBox = useCallback((instanceId: string) => {
+    setSelectedInstanceId(instanceId);
+  }, []);
+
   if (!scenario || !displayPlan) {
     return (
       <div className="flex min-h-screen items-center justify-center p-8 text-slate-400">
@@ -198,6 +264,7 @@ export default function App() {
             trailerTransparent={transparent}
             exploded={exploded}
             selectedInstanceId={selectedInstanceId}
+            riskHighlightIds={riskHighlightIds}
             onSelectBox={(b) => setSelectedInstanceId(b?.instance_id ?? null)}
             centerOfMassMm={loadMetrics!.comMm}
             requestedBoxCount={loadMetrics!.requestedCount}
@@ -232,8 +299,20 @@ export default function App() {
               </div>
             </div>
           </div>
+          <AiOptimizePanel
+            busy={busy}
+            onVerify={verifyAiConnection}
+            onOptimize={(notes, key) => void onOptimizeAi(notes, key)}
+            lastStrategy={aiStrategy}
+          />
+          <RecommendationsPanel report={safetyAnalysis?.recommendations} />
           <LoadInsightsPanel trailer={t} metrics={loadMetrics!} selectedBox={selectedBox} />
-          <SafetyAnalysisPanel trailer={t} analysis={safetyAnalysis} />
+          <SafetyAnalysisPanel
+            trailer={t}
+            analysis={safetyAnalysis}
+            selectedInstanceId={selectedInstanceId}
+            onFocusBox={onFocusBox}
+          />
           {selectedBox && (
             <div className="rounded border border-accent/40 bg-panel p-3 text-xs">
               <div className="flex items-start justify-between gap-2">
@@ -332,6 +411,23 @@ export default function App() {
               className="rounded bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50"
             >
               Przelicz rozmieszczenie
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void onOptimizeStacked()}
+              className="rounded border border-emerald-800/60 bg-emerald-950/40 px-3 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-950/70 disabled:opacity-50"
+              title="Układ pionowy: stosy kartonów, cięższe na dole — koryguje rozrzucenie po podłodze"
+            >
+              Optymalizuj układ (stosy)
+            </button>
+            <button
+              type="button"
+              disabled={displayPlan.boxes.length === 0 || busy}
+              onClick={() => void onExportPdf()}
+              className="rounded border border-line bg-panel px-3 py-2 text-sm hover:bg-panel2 disabled:opacity-50"
+            >
+              Mapa załadunku (PDF)
             </button>
             <button
               type="button"

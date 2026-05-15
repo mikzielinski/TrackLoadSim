@@ -12,6 +12,7 @@ from app.models.schemas import (
     SpeedScenarioRisk,
     Trailer,
 )
+from app.services.recommendations import build_recommendations
 
 G = 9.81
 
@@ -153,7 +154,7 @@ def analyze_load_safety(
 
     com = _com_mm(boxes)
     if com is None:
-        return LoadSafetyAnalysis(
+        empty = LoadSafetyAnalysis(
             rollover=RolloverEstimate(
                 com_height_road_m=trailer.deck_height_mm / 1000,
                 static_rollover_lateral_g=0,
@@ -167,6 +168,7 @@ def analyze_load_safety(
             global_ok=True,
             notes=["Brak skrzynek w planie."],
         )
+        return empty.model_copy(update={"recommendations": build_recommendations(trailer, products, plan, empty)})
 
     rollover = _rollover(trailer, com[2])
     long_g = trailer.max_brake_accel_g
@@ -212,11 +214,14 @@ def analyze_load_safety(
     if not global_ok and rollover.ok:
         notes.append("Uwaga: wysokie ryzyko przesunięcia ładunku luzem przy założonych przyspieszeniach.")
 
-    return LoadSafetyAnalysis(
+    analysis = LoadSafetyAnalysis(
         rollover=rollover,
         speed_scenarios=speed_rows,
         packaging_risks=packaging_risks,
         ceiling_packed_ids=ceiling,
         global_ok=global_ok,
         notes=notes,
+        recommendations=None,
     )
+    recs = build_recommendations(trailer, products, plan, analysis)
+    return analysis.model_copy(update={"recommendations": recs})

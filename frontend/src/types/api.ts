@@ -84,6 +84,32 @@ export interface OptimizeResponse {
   physics: PhysicsValidationResult;
 }
 
+export type PackMode = "greedy" | "stacked";
+
+export interface AiConnectionStatus {
+  configured: boolean;
+  connected: boolean;
+  model: string | null;
+  message: string;
+}
+
+export interface AiPackingGuidance {
+  pack_mode: PackMode;
+  item_sequence_product_ids: string[];
+  fragile_floor_only: boolean;
+  strategy_summary: string;
+  loading_tips: string[];
+  model: string;
+}
+
+export interface AiOptimizeResponse {
+  plan: LoadingPlan;
+  physics: PhysicsValidationResult;
+  guidance: AiPackingGuidance;
+  connection: AiConnectionStatus;
+  safety_analysis?: LoadSafetyAnalysis | null;
+}
+
 export interface SpeedScenarioRisk {
   speed_kmh: number;
   lateral_g: number;
@@ -109,6 +135,28 @@ export interface RolloverEstimate {
   summary: string;
 }
 
+export type RecommendationStatus = "ok" | "caution" | "critical";
+
+export interface RecommendationSection {
+  status: RecommendationStatus;
+  headline: string;
+  items: string[];
+}
+
+export interface SummaryReport {
+  status: RecommendationStatus;
+  headline: string;
+  paragraph: string;
+  verdict: string;
+  key_metrics: string[];
+}
+
+export interface RecommendationsReport {
+  loading: RecommendationSection;
+  driving: RecommendationSection;
+  summary: SummaryReport;
+}
+
 export interface LoadSafetyAnalysis {
   rollover: RolloverEstimate;
   speed_scenarios: SpeedScenarioRisk[];
@@ -116,4 +164,5 @@ export interface LoadSafetyAnalysis {
   ceiling_packed_ids: string[];
   global_ok: boolean;
   notes: string[];
+  recommendations?: RecommendationsReport | null;
 }

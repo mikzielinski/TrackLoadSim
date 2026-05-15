@@ -35,6 +35,8 @@ export interface LoadMetrics {
   comAlongLengthPct: number | null;
   axleFront: AxleEstimate;
   axleRear: AxleEstimate;
+  stackLayers: number;
+  onFloorCount: number;
 }
 
 function boxCenter(b: PlacedBox): Vec3Mm {
@@ -105,6 +107,8 @@ export function computeLoadMetrics(
   const floorDeckM2 = L * W * MM ** 2;
   const onFloor = boxes.filter((b) => b.z_mm < 5);
   const floorUsedM2 = onFloor.reduce((s, b) => s + b.length_mm * b.width_mm * MM ** 2, 0);
+  const zBands = new Set(boxes.map((b) => Math.round(b.z_mm / 40)));
+  const stackLayers = zBands.size;
   const totalWeight = boxes.reduce((s, b) => s + b.weight_kg, 0) || plan.total_weight_kg;
 
   const com = computeCenterOfMassMm(boxes);
@@ -147,6 +151,8 @@ export function computeLoadMetrics(
     comAlongLengthPct: comAlongPct,
     axleFront,
     axleRear,
+    stackLayers,
+    onFloorCount: onFloor.length,
   };
 }
 

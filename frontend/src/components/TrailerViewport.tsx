@@ -1,7 +1,8 @@
 import { Canvas, useThree } from "@react-three/fiber";
-import { Edges, Grid, Line, OrbitControls } from "@react-three/drei";
-import { useCallback, useMemo } from "react";
+import { Edges, Grid, Line, OrbitControls, Text } from "@react-three/drei";
+import { useCallback, useEffect, useMemo } from "react";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { LoadingPlan, PlacedBox, Trailer } from "../types/api";
 import type { Vec3Mm } from "../utils/loadMetrics";
 
@@ -40,6 +41,47 @@ function CenterOfMassMarker({ comMm, markerRadiusM }: { comMm: Vec3Mm; markerRad
 }
 
 /** Obrys podłogi naczepy (z=0) — widać „gdzie kończy się skrzynia” względem siatki. */
+/** Krótkie boki (szerokość) = przód/tył · długie boki (długość) = lewa/prawa. */
+function TrailerDirectionLabels({ trailer }: { trailer: Trailer }) {
+  const L = trailer.length_mm * MM;
+  const W = trailer.width_mm * MM;
+  const y = 0.06;
+  const fs = Math.max(0.1, Math.min(L, W) * 0.028);
+  const labelProps = { fontSize: fs, color: "#38bdf8", anchorX: "center" as const, anchorY: "middle" as const };
+  return (
+    <group raycast={() => {}}>
+      <Text position={[-0.35, y, W * 0.5]} rotation={[0, Math.PI / 2, 0]} {...labelProps}>
+        PRZÓD
+      </Text>
+      <Text position={[L + 0.35, y, W * 0.5]} rotation={[0, -Math.PI / 2, 0]} {...labelProps}>
+        TYŁ
+      </Text>
+      <Text position={[L * 0.5, y, -0.35]} {...labelProps}>
+        LEWA
+      </Text>
+      <Text position={[L * 0.5, y, W + 0.35]} {...labelProps}>
+        PRAWA
+      </Text>
+      <Line
+        points={[
+          new THREE.Vector3(0.08, y, W * 0.5),
+          new THREE.Vector3(L * 0.28, y, W * 0.5),
+        ]}
+        color="#38bdf8"
+        lineWidth={1.5}
+      />
+      <Line
+        points={[
+          new THREE.Vector3(L * 0.72, y, W * 0.5),
+          new THREE.Vector3(L - 0.08, y, W * 0.5),
+        ]}
+        color="#64748b"
+        lineWidth={1.5}
+      />
+    </group>
+  );
+}
+
 function TrailerFootprint({ trailer }: { trailer: Trailer }) {
   const L = trailer.length_mm * MM;
   const W = trailer.width_mm * MM;
@@ -94,17 +136,33 @@ function TrailerShell({
   );
 }
 
+function CameraFocus({ box }: { box: PlacedBox | null }) {
+  const controls = useThree((s) => s.controls) as OrbitControlsImpl | undefined;
+  useEffect(() => {
+    if (!box || !controls) return;
+    const cx = box.x_mm + box.length_mm / 2;
+    const cy = box.y_mm + box.width_mm / 2;
+    const cz = box.z_mm + box.height_mm / 2;
+    const [px, py, pz] = dataToScene(cx, cy, cz);
+    controls.target.set(px, py, pz);
+    controls.update();
+  }, [box, controls]);
+  return null;
+}
+
 function CargoBox({
   b,
   exploded,
   center,
   selected,
+  riskHighlight,
   onSelect,
 }: {
   b: PlacedBox;
   exploded: boolean;
   center: THREE.Vector3;
   selected: boolean;
+  riskHighlight: boolean;
   onSelect: (box: PlacedBox) => void;
 }) {
   const { gl } = useThree();
@@ -127,8 +185,9 @@ function CargoBox({
   }, [centerMm.x, centerMm.y, centerMm.z, exploded, center]);
 
   const color = b.unstable ? "#f97316" : b.color || "#3b82f6";
-  const emissive = selected ? "#38bdf8" : b.unstable ? "#7c2d12" : "#000000";
-  const emissiveIntensity = selected ? 0.45 : b.unstable ? 0.25 : 0;
+  const emissive = selected ? (riskHighlight ? "#ef4444" : "#38bdf8") : b.unstable ? "#7c2d12" : "#000000";
+  const emissiveIntensity = selected ? 0.55 : b.unstable ? 0.25 : 0;
+  const edgeColor = selected ? (riskHighlight ? "#fca5a5" : "#7dd3fc") : undefined;
 
   return (
     <mesh
@@ -153,6 +212,7 @@ function CargoBox({
         emissive={emissive}
         emissiveIntensity={emissiveIntensity}
       />
+      {selected && edgeColor && <Edges color={edgeColor} linewidth={2} threshold={15} />}
     </mesh>
   );
 }
@@ -163,6 +223,7 @@ export function TrailerViewport({
   trailerTransparent,
   exploded,
   selectedInstanceId,
+  riskHighlightIds,
   onSelectBox,
   centerOfMassMm,
   requestedBoxCount,
@@ -172,6 +233,7 @@ export function TrailerViewport({
   trailerTransparent: boolean;
   exploded: boolean;
   selectedInstanceId: string | null;
+  riskHighlightIds?: Set<string>;
   onSelectBox: (box: PlacedBox | null) => void;
   centerOfMassMm: Vec3Mm | null;
   requestedBoxCount?: number;
@@ -184,6 +246,7 @@ export function TrailerViewport({
   }, [trailer]);
 
   const boxes = plan?.boxes ?? [];
+  const selectedBox = selectedInstanceId ? boxes.find((b) => b.instance_id === selectedInstanceId) ?? null : null;
   const L = trailer.length_mm * MM;
   const W = trailer.width_mm * MM;
   const H = trailer.height_mm * MM;
@@ -202,7 +265,9 @@ export function TrailerViewport({
         <ambientLight intensity={0.45} />
         <directionalLight position={[L * 0.6, H * 2, W * 0.4]} intensity={1.1} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
         <TrailerFootprint trailer={trailer} />
+        <TrailerDirectionLabels trailer={trailer} />
         <TrailerShell trailer={trailer} transparent={trailerTransparent} />
+        <CameraFocus box={selectedBox} />
         {boxes.map((b) => (
           <CargoBox
             key={b.instance_id}
@@ -210,6 +275,7 @@ export function TrailerViewport({
             exploded={exploded}
             center={center}
             selected={b.instance_id === selectedInstanceId}
+            riskHighlight={riskHighlightIds?.has(b.instance_id) ?? false}
             onSelect={onSelectBox}
           />
         ))}
@@ -236,7 +302,7 @@ export function TrailerViewport({
           {requestedBoxCount != null && ` / ${requestedBoxCount} szt. (quantity)`}
         </div>
         <div className="text-slate-500">
-          X = długość (przód x=0) · Z = szerokość · Y = wysokość
+          Krótkie boki: PRZÓD (x=0) → TYŁ · Długie boki: LEWA / PRAWA (oś Z) · Y = wysokość
         </div>
         <div className="text-slate-500">
           Niebieski obrys = podłoga · jasne krawędzie = skrzynia · różowy = środek masy

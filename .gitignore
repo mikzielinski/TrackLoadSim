@@ -17,3 +17,7 @@ dist/
 # OS
 Thumbs.db
 .DS_Store
+
+# Test / artefakty lokalne
+backend/_*.pdf
+*.tsbuildinfo
