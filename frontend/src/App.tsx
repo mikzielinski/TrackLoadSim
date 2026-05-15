@@ -437,6 +437,36 @@ export default function App() {
             >
               Eksport JSON
             </button>
+            <div className="rounded border border-line/80 bg-panel p-2 text-[11px] text-slate-500">
+              <div className="font-medium text-slate-400">Własny scenariusz</div>
+              <p className="mt-1 leading-snug">
+                Pobierz szablon, uzupełnij towar (i naczepę w Excelu), potem importuj plik.
+              </p>
+              <div className="mt-2 flex flex-col gap-1">
+                <a
+                  href="/api/templates/scenario.xlsx"
+                  download="TrackLoadSim_scenario_template.xlsx"
+                  className="rounded border border-line px-2 py-1.5 text-center text-slate-300 hover:bg-panel2"
+                >
+                  Szablon Excel (.xlsx)
+                </a>
+                <a
+                  href="/api/templates/scenario.csv"
+                  download="TrackLoadSim_scenario_products.csv"
+                  className="rounded border border-line px-2 py-1.5 text-center text-slate-300 hover:bg-panel2"
+                >
+                  Szablon CSV (tylko towar)
+                </a>
+              </div>
+              <a
+                href="https://github.com/mikzielinski/TrackLoadSim/blob/main/docs/SZABLON_SCENARIUSZA.md"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 block text-accent hover:underline"
+              >
+                Instrukcja szablonu →
+              </a>
+            </div>
             <label className="cursor-pointer rounded border border-dashed border-line bg-panel px-3 py-2 text-center text-sm hover:bg-panel2">
               Import .xlsx / .csv
               <input type="file" accept=".xlsx,.xlsm,.csv" className="hidden" onChange={onImport} />

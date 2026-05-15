@@ -59,6 +59,18 @@ Oblicza plan załadunku (greedy packer) i opcjonalnie waliduje fizykę.
 }
 ```
 
+## Szablony scenariuszy
+
+### `GET /api/templates/scenario.xlsx`
+
+Pobiera szablon Excel: arkusze **Products** + **Trailer** (przykładowe dane).
+
+### `GET /api/templates/scenario.csv`
+
+Pobiera szablon CSV (tylko lista towaru).
+
+Instrukcja: [SZABLON_SCENARIUSZA.md](./SZABLON_SCENARIUSZA.md)
+
 ## Import
 
 ### `POST /api/import/products`
@@ -67,10 +79,17 @@ Oblicza plan załadunku (greedy packer) i opcjonalnie waliduje fizykę.
 
 Zwraca obiekt `Scenario` z wyliczonym planem i ewentualnym ostrzeżeniem fizyki.
 
-**Kolumny CSV/Excel (przykład):**
+**Excel (.xlsx):**
 
-| ProductName | LengthMm | WidthMm | HeightMm | WeightKg | Quantity | Fragile | Compressible | MaxStackWeightKg |
-|-------------|----------|---------|----------|----------|----------|---------|--------------|------------------|
+- Arkusz **Products** — wiersze towaru (nagłówek + dane).
+- Arkusz **Trailer** (opcjonalny) — kolumny `Pole` / `Wartość`: `ScenarioId`, `ScenarioTitle`, `ScenarioDescription`, wymiary naczepy, limity osi.
+
+**CSV:** tylko produkty; naczepa standardowa; `scenario_id` z nazwy pliku.
+
+**Kolumny Products (przykład):**
+
+| ProductId | ProductName | LengthMm | WidthMm | HeightMm | WeightKg | Quantity | Fragile | Compressible | MaxStackWeightKg |
+|-----------|-------------|----------|---------|----------|----------|----------|---------|--------------|------------------|
 
 ## Eksport
 

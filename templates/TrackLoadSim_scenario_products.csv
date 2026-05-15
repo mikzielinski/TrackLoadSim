@@ -1,0 +1,3 @@
+ProductId,ProductName,LengthMm,WidthMm,HeightMm,WeightKg,Quantity,Fragile,Compressible,MaxStackWeightKg,StackingGroup,NoRotate,PackagingKind,InternalVoidRatio
+BOX-A,Karton A (przykład),1200,800,900,180,6,NIE,NIE,2000,GENERAL,NIE,rigid,0
+BOX-B,Karton B (przykład),1000,1000,800,220,2,NIE,TAK,1500,GENERAL,NIE,compressible,0.1

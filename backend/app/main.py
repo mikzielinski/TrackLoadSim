@@ -4,7 +4,9 @@ import json
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from pathlib import Path
+
+from fastapi.responses import FileResponse, Response
 
 from app.data.scenarios import ALL_SCENARIOS, get_scenario
 from app.models.schemas import (
@@ -24,7 +26,8 @@ from app.models.schemas import (
 from app.optimizer import pack_trailer
 from app.physics import validate_static_drop
 from app.physics.dynamics_analysis import analyze_load_safety
-from app.services.excel_import import parse_csv_text, parse_excel
+from app.services.excel_import import build_scenario_template_xlsx, parse_csv_text, parse_excel
+from app.services.import_meta import slug_scenario_id
 from app.services.ai_optimizer import (
     pack_with_guidance,
     request_packing_guidance,
@@ -86,9 +89,9 @@ async def import_products(file: UploadFile = File(...)) -> Scenario:
     raw = await file.read()
     name = (file.filename or "").lower()
     if name.endswith(".xlsx") or name.endswith(".xlsm"):
-        trailer, products = parse_excel(raw)
+        trailer, products, meta = parse_excel(raw)
     elif name.endswith(".csv"):
-        trailer, products = parse_csv_text(raw.decode("utf-8-sig", errors="replace"))
+        trailer, products, meta = parse_csv_text(raw.decode("utf-8-sig", errors="replace"))
     else:
         raise HTTPException(400, "Upload .xlsx or .csv")
     if not products:
@@ -99,14 +102,41 @@ async def import_products(file: UploadFile = File(...)) -> Scenario:
     if physics is not None and not physics.ok and physics.mode == "pybullet":
         warn.append(f"Physics check: {physics.message}")
     plan = LoadingPlan(**{**plan.model_dump(), "warnings": warn})
+    base_id = slug_scenario_id(f"IMPORT_{Path(file.filename or 'import').stem}")
+    sid = meta.scenario_id_or(base_id)
     return Scenario(
-        scenario_id="IMPORTED",
-        title=f"Import: {file.filename}",
-        description="Loaded from spreadsheet; placements from greedy packer.",
+        scenario_id=sid,
+        title=meta.title_or(f"Import: {file.filename}"),
+        description=meta.description_or(
+            "Załadowano z arkusza; plan początkowy z pakowacza greedy. Edytuj dane i użyj Przelicz / Stosy / AI."
+        ),
         trailer=trailer,
         products=products,
         plan=plan,
     )
+
+
+_TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
+
+
+@app.get("/api/templates/scenario.xlsx")
+def download_scenario_template_xlsx() -> Response:
+    path = _TEMPLATES_DIR / "TrackLoadSim_scenario_template.xlsx"
+    if not path.is_file():
+        path.write_bytes(build_scenario_template_xlsx())
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="TrackLoadSim_scenario_template.xlsx",
+    )
+
+
+@app.get("/api/templates/scenario.csv")
+def download_scenario_template_csv() -> Response:
+    path = _TEMPLATES_DIR / "TrackLoadSim_scenario_products.csv"
+    if not path.is_file():
+        raise HTTPException(404, "Brak pliku szablonu CSV w repozytorium.")
+    return FileResponse(path, media_type="text/csv", filename=path.name)
 
 
 @app.post("/api/export/plan")

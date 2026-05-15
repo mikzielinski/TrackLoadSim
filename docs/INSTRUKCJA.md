@@ -248,14 +248,15 @@ Po każdej zmianie planu (Przelicz / Stosy / AI) warto **poczekać chwilę** na 
 
 ---
 
-## 8. Import Excel / CSV
+## 8. Własne scenariusze (szablon + import)
 
-**POST** przez UI: Import w panelu bocznym.
+Pełna instrukcja: **[SZABLON_SCENARIUSZA.md](./SZABLON_SCENARIUSZA.md)** — pobierz szablon Excel/CSV w panelu bocznym, uzupełnij **Products** (i opcjonalnie **Trailer** w .xlsx), potem **Import**.
 
-Przykładowe kolumny:
+Przykładowe kolumny (arkusz Products):
 
 | Kolumna | Opis |
 |---------|------|
+| ProductId | Kod SKU |
 | ProductName | Nazwa |
 | LengthMm, WidthMm, HeightMm | Wymiary [mm] |
 | WeightKg | Masa [kg] |
@@ -305,6 +306,7 @@ Logi backendu: terminal z `uvicorn`. Dokumentacja API: [API.md](./API.md), Swagg
 | Dokument | Zawartość |
 |----------|-----------|
 | [API.md](./API.md) | Endpointy REST, modele JSON |
+| [SZABLON_SCENARIUSZA.md](./SZABLON_SCENARIUSZA.md) | Szablon Excel/CSV i własne scenariusze |
 | [AI.md](./AI.md) | Szczegóły integracji OpenAI |
 | [PROJECT_SPEC.md](./PROJECT_SPEC.md) | Specyfikacja MVP |
 | [../backend/README.md](../backend/README.md) | Struktura backendu |

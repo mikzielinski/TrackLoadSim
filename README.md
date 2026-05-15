@@ -33,7 +33,9 @@ Szczegóły: **[docs/INSTALACJA.md](docs/INSTALACJA.md)**
 | Dokument | Opis |
 |----------|------|
 | **[docs/INSTRUKCJA.md](docs/INSTRUKCJA.md)** | **Pełna instrukcja użytkownika** (workflow, panele, AI, FAQ) |
+| **[docs/SZABLON_SCENARIUSZA.md](docs/SZABLON_SCENARIUSZA.md)** | **Szablon Excel/CSV** — własne scenariusze |
 | [docs/INSTALACJA.md](docs/INSTALACJA.md) | Instalacja Windows / Linux / macOS |
+| [templates/](templates/) | Pliki szablonów do pobrania |
 | [docs/API.md](docs/API.md) | REST API |
 | [docs/AI.md](docs/AI.md) | Integracja OpenAI |
 | [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) | Specyfikacja MVP |
